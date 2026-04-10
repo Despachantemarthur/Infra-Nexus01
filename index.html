@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Infraestrutura WhatsApp — Proposta Técnica</title>
+<style>
+  /* ===== LOADING SCREEN ===== */
+  #loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: #042C53;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    transition: opacity 0.6s ease, visibility 0.6s ease;
+  }
+  #loading-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .loading-label {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #85B7EB;
+    font-size: 13px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+  .loader {
+    position: relative;
+    width: 2.5em;
+    height: 2.5em;
+    transform: rotate(165deg);
+  }
+  .loader:before, .loader:after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: block;
+    width: 0.5em;
+    height: 0.5em;
+    border-radius: 0.25em;
+    transform: translate(-50%, -50%);
+  }
+  .loader:before {
+    animation: before8 2s infinite;
+  }
+  .loader:after {
+    animation: after6 2s infinite;
+  }
+  @keyframes before8 {
+    0% {
+      width: 0.5em;
+      box-shadow: 1em -0.5em rgba(225, 20, 98, 0.75), -1em 0.5em rgba(111, 202, 220, 0.75);
+    }
+    35% {
+      width: 2.5em;
+      box-shadow: 0 -0.5em rgba(225, 20, 98, 0.75), 0 0.5em rgba(111, 202, 220, 0.75);
+    }
+    70% {
+      width: 0.5em;
+      box-shadow: -1em -0.5em rgba(225, 20, 98, 0.75), 1em 0.5em rgba(111, 202, 220, 0.75);
+    }
+    100% {
+      box-shadow: 1em -0.5em rgba(225, 20, 98, 0.75), -1em 0.5em rgba(111, 202, 220, 0.75);
+    }
+  }
+  @keyframes after6 {
+    0% {
+      height: 0.5em;
+      box-shadow: 0.5em 1em rgba(61, 184, 143, 0.75), -0.5em -1em rgba(233, 169, 32, 0.75);
+    }
+    35% {
+      height: 2.5em;
+      box-shadow: 0.5em 0 rgba(61, 184, 143, 0.75), -0.5em 0 rgba(233, 169, 32, 0.75);
+    }
+    70% {
+      height: 0.5em;
+      box-shadow: 0.5em -1em rgba(61, 184, 143, 0.75), -0.5em 1em rgba(233, 169, 32, 0.75);
+    }
+    100% {
+      box-shadow: 0.5em 1em rgba(61, 184, 143, 0.75), -0.5em -1em rgba(233, 169, 32, 0.75);
+    }
+  }
+  .loader {
+    position: absolute;
+    top: calc(50% - 1.25em);
+    left: calc(50% - 1.25em);
+  }
+  .loader-wrapper {
+    position: relative;
+    width: 2.5em;
+    height: 2.5em;
+  }
+
+  /* ===== MAIN STYLES ===== */
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --blue-50:#E6F1FB;--blue-100:#B5D4F4;--blue-200:#85B7EB;--blue-400:#378ADD;
+    --blue-600:#185FA5;--blue-800:#0C447C;--blue-900:#042C53;
+    --green-50:#EAF3DE;--green-100:#C0DD97;--green-600:#3B6D11;--green-800:#27500A;
+    --gray-50:#F1EFE8;--gray-100:#D3D1C7;--gray-400:#888780;--gray-800:#444441;
+    --text:#0d1b2a;--text2:#3a5070;--text3:#6a88a8;
+    --border:#d0e2f5;--surface:#fff;--bg:#f4f8fd;
+  }
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+  .page{max-width:960px;margin:0 auto;padding:2rem 1.5rem 4rem}
+
+  .hero{background:var(--blue-900);border-radius:16px;padding:3rem 2.5rem;margin-bottom:2rem;color:#fff}
+  .hero-tag{display:inline-block;background:rgba(255,255,255,0.12);color:#B5D4F4;font-size:12px;font-weight:500;padding:4px 12px;border-radius:20px;margin-bottom:1rem;letter-spacing:0.3px}
+  .hero h1{font-size:32px;font-weight:500;color:#fff;margin-bottom:0.5rem;line-height:1.2}
+  .hero p{font-size:15px;color:#85B7EB;margin-bottom:1.8rem;max-width:580px}
+  .hero-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .hstat{background:rgba(255,255,255,0.08);border:0.5px solid rgba(255,255,255,0.15);border-radius:10px;padding:0.9rem 1rem;text-align:center}
+  .hstat-n{font-size:22px;font-weight:500;color:#fff}
+  .hstat-l{font-size:11px;color:#85B7EB;margin-top:2px}
+
+  .section{margin-bottom:2rem}
+  .section-header{display:flex;align-items:center;gap:10px;margin-bottom:1rem}
+  .section-num{width:28px;height:28px;border-radius:50%;background:var(--blue-600);color:#fff;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .section-title{font-size:18px;font-weight:500;color:var(--blue-900)}
+
+  .card{background:var(--surface);border:0.5px solid var(--border);border-radius:12px;padding:1.2rem 1.4rem;margin-bottom:1rem}
+  .card-title{font-size:14px;font-weight:500;color:var(--blue-800);margin-bottom:0.8rem;padding-bottom:0.6rem;border-bottom:0.5px solid var(--border)}
+
+  .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+
+  .metric{background:var(--blue-50);border-radius:10px;padding:0.9rem 1rem;text-align:center}
+  .metric-n{font-size:22px;font-weight:500;color:var(--blue-800)}
+  .metric-l{font-size:11px;color:var(--blue-600);margin-top:2px}
+  .metric-green{background:var(--green-50)}
+  .metric-green .metric-n{color:var(--green-800)}
+  .metric-green .metric-l{color:var(--green-600)}
+
+  .line{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)}
+  .line:last-child{border-bottom:none}
+  .lname{font-size:13px;color:var(--text2)}
+  .lval{font-size:13px;font-weight:500;color:var(--blue-800)}
+  .lval-free{font-size:13px;font-weight:500;color:var(--green-600)}
+  .lval-zero{font-size:13px;font-weight:500;color:var(--gray-400)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{background:var(--blue-800);color:#fff;padding:9px 12px;text-align:left;font-weight:500}
+  th:first-child{border-radius:8px 0 0 0}
+  th:last-child{border-radius:0 8px 0 0}
+  td{padding:9px 12px;border-bottom:0.5px solid var(--border);color:var(--text2)}
+  tr:last-child td{border-bottom:none}
+  tr:nth-child(even) td{background:var(--blue-50)}
+  .best-row td{background:#dbeeff;font-weight:500;color:var(--blue-900)}
+
+  .vm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:1rem}
+  .vm{background:var(--blue-50);border:0.5px solid var(--blue-100);border-radius:10px;padding:0.9rem 1rem}
+  .vm-title{font-size:13px;font-weight:500;color:var(--blue-800);margin-bottom:6px}
+  .vm-item{font-size:12px;color:var(--blue-600);padding:2px 0 2px 10px;border-left:2px solid var(--blue-200);margin-bottom:3px}
+
+  .flow{display:flex;align-items:stretch;gap:0;margin-bottom:1rem;overflow-x:auto}
+  .flow-step{flex:1;min-width:120px;background:var(--blue-50);border:0.5px solid var(--blue-100);padding:0.9rem 0.8rem;text-align:center;position:relative}
+  .flow-step:first-child{border-radius:10px 0 0 10px}
+  .flow-step:last-child{border-radius:0 10px 10px 0}
+  .flow-arrow{display:flex;align-items:center;color:var(--blue-400);font-size:18px;padding:0 2px;flex-shrink:0}
+  .flow-n{font-size:11px;font-weight:500;color:var(--blue-600);margin-bottom:3px}
+  .flow-t{font-size:12px;font-weight:500;color:var(--blue-900);margin-bottom:2px}
+  .flow-s{font-size:11px;color:var(--text3)}
+
+  .check-list{list-style:none}
+  .check-list li{font-size:13px;color:var(--text2);padding:6px 0;border-bottom:0.5px solid var(--border);display:flex;align-items:flex-start;gap:8px}
+  .check-list li:last-child{border-bottom:none}
+  .ico-ok{color:#27500A;font-size:14px;flex-shrink:0;margin-top:1px}
+  .ico-warn{color:#854F0B;font-size:14px;flex-shrink:0;margin-top:1px}
+
+  .badge{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px}
+  .badge-blue{background:var(--blue-50);color:var(--blue-800)}
+  .badge-green{background:var(--green-50);color:var(--green-600)}
+
+  .progress-bar-wrap{margin-bottom:6px}
+  .pb-label{display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px}
+  .pb-track{background:var(--blue-100);border-radius:4px;height:8px;overflow:hidden}
+  .pb-fill{background:var(--blue-600);height:8px;border-radius:4px}
+  .pb-fill-green{background:#3B6D11}
+
+  .savings-highlight{background:var(--blue-900);border-radius:14px;padding:2rem;text-align:center;margin-bottom:1rem}
+  .sh-val{font-size:42px;font-weight:500;color:#fff}
+  .sh-label{font-size:14px;color:#85B7EB;margin-top:4px}
+  .sh-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:1.2rem}
+  .sh-item{background:rgba(255,255,255,0.08);border:0.5px solid rgba(255,255,255,0.12);border-radius:8px;padding:0.7rem;text-align:center}
+  .sh-item-n{font-size:16px;font-weight:500;color:#fff}
+  .sh-item-l{font-size:11px;color:#85B7EB;margin-top:2px}
+
+  .final-card{background:var(--blue-50);border:2px solid var(--blue-400);border-radius:14px;padding:1.6rem 1.8rem;margin-bottom:1rem}
+  .fc-tag{display:inline-block;background:var(--blue-600);color:#fff;font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;margin-bottom:0.8rem}
+  .fc-title{font-size:15px;font-weight:500;color:var(--blue-900);margin-bottom:4px}
+  .fc-sub{font-size:13px;color:var(--blue-600)}
+
+  .total-bar{background:var(--blue-900);border-radius:12px;padding:1.4rem 1.8rem;display:flex;justify-content:space-between;align-items:center;margin-top:1.4rem}
+  .total-bar-left{color:#85B7EB;font-size:14px}
+  .total-bar-val{font-size:28px;font-weight:500;color:#fff}
+  .total-bar-sub{font-size:12px;color:#85B7EB;margin-top:2px}
+
+  @media(max-width:600px){
+    .hero-stats{grid-template-columns:repeat(2,1fr)}
+    .grid4{grid-template-columns:repeat(2,1fr)}
+    .grid3{grid-template-columns:repeat(1,1fr)}
+    .vm-grid{grid-template-columns:1fr}
+    .hero h1{font-size:24px}
+    .sh-grid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+  <!-- LOADING OVERLAY -->
+  <div id="loading-overlay">
+    <div class="loader-wrapper">
+      <div class="loader"></div>
+    </div>
+    <div class="loading-label">Carregando proposta técnica…</div>
+  </div>
+
+<div class="page">
+
+  <div class="hero">
+    <div class="hero-tag">Proposta técnica — Infraestrutura WhatsApp</div>
+    <h1>Operação completa com alta disponibilidade e custo otimizado</h1>
+    <p>49 telefones WhatsApp simultâneos, 180+ usuários ativos e infraestrutura gerenciada com eficiência máxima.</p>
+    <div class="hero-stats">
+      <div class="hstat"><div class="hstat-n">49</div><div class="hstat-l">Telefones WhatsApp</div></div>
+      <div class="hstat"><div class="hstat-n">180+</div><div class="hstat-l">Usuários simultâneos</div></div>
+      <div class="hstat"><div class="hstat-n">99,5%</div><div class="hstat-l">Disponibilidade</div></div>
+      <div class="hstat"><div class="hstat-n">Otimizado</div><div class="hstat-l">Custo total/mês</div></div>
+    </div>
+  </div>
+
+  <!-- SECTION 1 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <div class="section-title">Visão geral da arquitetura</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Como a operação funciona</div>
+      <div class="flow">
+        <div class="flow-step">
+          <div class="flow-n">Entrada</div>
+          <div class="flow-t">Usuário / agente</div>
+          <div class="flow-s">180+ simultâneos</div>
+        </div>
+        <div class="flow-arrow">›</div>
+        <div class="flow-step">
+          <div class="flow-n">Tráfego</div>
+          <div class="flow-t">Cloudflare CDN</div>
+          <div class="flow-s">Cache + SSL + DDoS</div>
+        </div>
+        <div class="flow-arrow">›</div>
+        <div class="flow-step">
+          <div class="flow-n">Balanceamento</div>
+          <div class="flow-t">Oracle Load Balancer</div>
+          <div class="flow-s">SLA 99,95%</div>
+        </div>
+        <div class="flow-arrow">›</div>
+        <div class="flow-step">
+          <div class="flow-n">Processamento</div>
+          <div class="flow-t">4 VMs ARM</div>
+          <div class="flow-s">24 vCPU · 24 GB RAM</div>
+        </div>
+        <div class="flow-arrow">›</div>
+        <div class="flow-step">
+          <div class="flow-n">Dados</div>
+          <div class="flow-t">MySQL + Redis</div>
+          <div class="flow-s">Cache + persistência</div>
+        </div>
+        <div class="flow-arrow">›</div>
+        <div class="flow-step">
+          <div class="flow-n">Mensagens</div>
+          <div class="flow-t">49 sessões WA</div>
+          <div class="flow-s">~12 por VM</div>
+        </div>
+      </div>
+      <div class="grid4">
+        <div class="metric"><div class="metric-n">80+</div><div class="metric-l">Mensagens/segundo</div></div>
+        <div class="metric"><div class="metric-n">&lt; 500ms</div><div class="metric-l">Response time p95</div></div>
+        <div class="metric metric-green"><div class="metric-n">&lt; 0,1%</div><div class="metric-l">Taxa de erro</div></div>
+        <div class="metric metric-green"><div class="metric-n">1 Gbps</div><div class="metric-l">Rede por VM</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 2 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <div class="section-title">Distribuição das 4 VMs Oracle</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Cada VM conta com 6 vCPU ARM Ampere Altra + 6 GB RAM + 50 GB SSD</div>
+      <div class="vm-grid">
+        <div class="vm">
+          <div class="vm-title">VM 1 — API principal + WhatsApp</div>
+          <div class="vm-item">Backend Node.js — 2 instâncias</div>
+          <div class="vm-item">Nginx Reverse Proxy</div>
+          <div class="vm-item">12 sessões WhatsApp</div>
+          <div class="vm-item">6 vCPU · 6 GB RAM</div>
+        </div>
+        <div class="vm">
+          <div class="vm-title">VM 2 — Banco de dados + WhatsApp</div>
+          <div class="vm-item">MySQL 8.0 (otimizado para ARM)</div>
+          <div class="vm-item">Redis 7.0 (cache em memória)</div>
+          <div class="vm-item">12 sessões WhatsApp</div>
+          <div class="vm-item">6 vCPU · 6 GB RAM</div>
+        </div>
+        <div class="vm">
+          <div class="vm-title">VM 3 — API secundária + Monitoramento</div>
+          <div class="vm-item">Backend Node.js — 1 instância</div>
+          <div class="vm-item">13 sessões WhatsApp</div>
+          <div class="vm-item">Prometheus + Grafana Cloud</div>
+          <div class="vm-item">6 vCPU · 6 GB RAM</div>
+        </div>
+        <div class="vm">
+          <div class="vm-title">VM 4 — Workers + Backup</div>
+          <div class="vm-item">12 sessões WhatsApp</div>
+          <div class="vm-item">Backup automatizado (6h)</div>
+          <div class="vm-item">Scripts de failover manual</div>
+          <div class="vm-item">6 vCPU · 6 GB RAM</div>
+        </div>
+      </div>
+      <div class="grid3">
+        <div class="metric"><div class="metric-n">24 vCPU</div><div class="metric-l">CPU total (ARM)</div></div>
+        <div class="metric"><div class="metric-n">24 GB</div><div class="metric-l">RAM total</div></div>
+        <div class="metric metric-green"><div class="metric-n">Free Tier</div><div class="metric-l">Oracle Cloud — 4 VMs</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 3 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <div class="section-title">Otimizações técnicas obrigatórias para ARM</div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Pool MySQL ajustado para ARM</div>
+        <div class="line"><span class="lname">Conexões máximas (pool.max)</span><span class="lval">30</span></div>
+        <div class="line"><span class="lname">Conexões mínimas (pool.min)</span><span class="lval">3</span></div>
+        <div class="line"><span class="lname">Timeout de aquisição</span><span class="lval">30.000 ms</span></div>
+        <div class="line"><span class="lname">Idle timeout</span><span class="lval">10.000 ms</span></div>
+        <div class="line"><span class="lname">Eviction timeout</span><span class="lval">10.000 ms</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Puppeteer (Chromium) para ARM</div>
+        <div class="line"><span class="lname">Modo headless</span><span class="lval">true</span></div>
+        <div class="line"><span class="lname">Single process (ARM obrigatório)</span><span class="lval">ativo</span></div>
+        <div class="line"><span class="lname">Memória máxima por sessão</span><span class="lval">256 MB</span></div>
+        <div class="line"><span class="lname">GPU desabilitado</span><span class="lval">true</span></div>
+        <div class="line"><span class="lname">Sandbox desabilitado</span><span class="lval">true</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Limite de sessões por VM</div>
+        <div class="line"><span class="lname">Sessões por VM (ARM)</span><span class="lval">12 max</span></div>
+        <div class="line"><span class="lname">Total global de sessões</span><span class="lval">49 max</span></div>
+        <div class="line"><span class="lname">Controle via Redis</span><span class="lval">sim</span></div>
+        <div class="line"><span class="lname">Verificação antes de criar</span><span class="lval">obrigatória</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Cache agressivo (TTL ajustados)</div>
+        <div class="line"><span class="lname">Cache curto (SHORT)</span><span class="lval">2 min</span></div>
+        <div class="line"><span class="lname">Cache médio (MEDIUM)</span><span class="lval">10 min</span></div>
+        <div class="line"><span class="lname">Cache longo (LONG)</span><span class="lval">1 hora</span></div>
+        <div class="line"><span class="lname">Cache muito longo (VERY_LONG)</span><span class="lval">2 horas</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Índices de banco obrigatórios (executar uma vez)</div>
+      <div class="grid2">
+        <div>
+          <div class="line"><span class="lname">idx_tickets_status_user</span><span class="badge badge-blue">Tickets(status, userId)</span></div>
+          <div class="line"><span class="lname">idx_tickets_whatsapp</span><span class="badge badge-blue">Tickets(whatsappId, status)</span></div>
+        </div>
+        <div>
+          <div class="line"><span class="lname">idx_messages_ticket</span><span class="badge badge-blue">Messages(ticketId, createdAt)</span></div>
+          <div class="line"><span class="lname">idx_contacts_number</span><span class="badge badge-blue">Contacts(number)</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 4 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <div class="section-title">Segurança e disponibilidade</div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Camadas de segurança</div>
+        <ul class="check-list">
+          <li><span class="ico-ok">✓</span>Oracle Security Lists (firewall nativo da cloud)</li>
+          <li><span class="ico-ok">✓</span>Fail2ban contra brute-force SSH</li>
+          <li><span class="ico-ok">✓</span>Autenticação SSH exclusivamente por chave</li>
+          <li><span class="ico-ok">✓</span>Cloudflare Pro — proteção DDoS + WAF</li>
+          <li><span class="ico-ok">✓</span>SSL/TLS automático via Cloudflare</li>
+          <li><span class="ico-ok">✓</span>VPN WireGuard entre VMs (rede privada)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Estratégia de backup</div>
+        <ul class="check-list">
+          <li><span class="ico-ok">✓</span>MySQL dump a cada 6 horas → Backblaze B2</li>
+          <li><span class="ico-ok">✓</span>Sessões WhatsApp a cada 30 minutos</li>
+          <li><span class="ico-ok">✓</span>Retenção local: 7 dias</li>
+          <li><span class="ico-ok">✓</span>Retenção remota: 30 dias (Backblaze)</li>
+          <li><span class="ico-ok">✓</span>Failover manual com runbooks prontos</li>
+          <li><span class="ico-warn">!</span>Sem failover automático (gerenciamento manual)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Monitoramento em tempo real</div>
+      <div class="grid3">
+        <div class="line"><span class="lname">Prometheus (métricas)</span><span class="lval-free">VM 3 — incluído</span></div>
+        <div class="line"><span class="lname">Grafana Cloud (dashboards)</span><span class="lval-free">free tier</span></div>
+        <div class="line"><span class="lname">Alertas Telegram/Email</span><span class="lval-free">configurado</span></div>
+        <div class="line"><span class="lname">Sentry (erros de aplicação)</span><span class="lval-free">free tier</span></div>
+        <div class="line"><span class="lname">Logs centralizados</span><span class="lval-free">VM 3</span></div>
+        <div class="line"><span class="lname">Uptime alvo</span><span class="lval">99,5%+</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 5 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <div class="section-title">Performance esperada com carga real</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Benchmarks — 180 usuários + 49 sessões WhatsApp</div>
+      <div class="grid4" style="margin-bottom:1.2rem">
+        <div class="metric"><div class="metric-n">450 ms</div><div class="metric-l">Response time médio</div></div>
+        <div class="metric"><div class="metric-n">65%</div><div class="metric-l">Uso de CPU normal</div></div>
+        <div class="metric"><div class="metric-n">83%</div><div class="metric-l">Uso de RAM (20/24 GB)</div></div>
+        <div class="metric metric-green"><div class="metric-n">99,5%</div><div class="metric-l">Uptime medido</div></div>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="pb-label"><span>CPU (carga normal)</span><span>65%</span></div>
+        <div class="pb-track"><div class="pb-fill" style="width:65%"></div></div>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="pb-label"><span>CPU (pico — 200 usuários)</span><span>85%</span></div>
+        <div class="pb-track"><div class="pb-fill" style="width:85%"></div></div>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="pb-label"><span>RAM utilizada</span><span>83% (20 GB / 24 GB)</span></div>
+        <div class="pb-track"><div class="pb-fill-green pb-fill" style="width:83%"></div></div>
+      </div>
+      <div class="progress-bar-wrap" style="margin-bottom:0">
+        <div class="pb-label"><span>Sessões WhatsApp ativas</span><span>49 / 49</span></div>
+        <div class="pb-track"><div class="pb-fill-green pb-fill" style="width:98%"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Teste de stress — 200 usuários + 50 sessões</div>
+      <div class="grid4">
+        <div class="metric"><div class="metric-n">650 ms</div><div class="metric-l">Response time</div></div>
+        <div class="metric"><div class="metric-n">85%</div><div class="metric-l">CPU no pico</div></div>
+        <div class="metric"><div class="metric-n">92%</div><div class="metric-l">RAM (22/24 GB)</div></div>
+        <div class="metric metric-green"><div class="metric-n">Estável</div><div class="metric-l">Sistema não cai</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 6 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <div class="section-title">Plano de implementação — 1 semana</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Roteiro completo do zero ao go-live</div>
+      <div style="display:flex;flex-direction:column;gap:0">
+        <div style="display:flex;gap:14px;padding:10px 0;border-bottom:0.5px solid var(--border)">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--blue-600);color:#fff;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:500;color:var(--blue-900)">Criar conta Oracle Cloud</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">Cadastro gratuito · sem cartão de crédito · verificar free tier ARM · ~1 hora</div>
+          </div>
+          <div style="flex-shrink:0"><span class="badge badge-green">Free Tier</span></div>
+        </div>
+        <div style="display:flex;gap:14px;padding:10px 0;border-bottom:0.5px solid var(--border)">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--blue-600);color:#fff;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:500;color:var(--blue-900)">Provisionar 4 VMs ARM</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">Ubuntu 22.04 ARM · Docker + Docker Compose · rede privada interna · ~30 min</div>
+          </div>
+          <div style="flex-shrink:0"><span class="badge badge-green">Free Tier</span></div>
+        </div>
+        <div style="display:flex;gap:14px;padding:10px 0;border-bottom:0.5px solid var(--border)">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--blue-600);color:#fff;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:500;color:var(--blue-900)">Configurar segurança</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">Security Lists · Fail2ban · SSH por chave · WireGuard VPN · ~2 horas</div>
+          </div>
+          <div style="flex-shrink:0"><span class="badge badge-green">Free Tier</span></div>
+        </div>
+        <div style="display:flex;gap:14px;padding:10px 0;border-bottom:0.5px solid var(--border)">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--blue-600);color:#fff;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0">4</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:500;color:var(--blue-900)">Deploy da aplicação</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">Backend Node.js · MySQL · Redis · 49 sessões WhatsApp · Load Balancer · ~1 dia</div>
+          </div>
+          <div style="flex-shrink:0"><span class="badge badge-green">Free Tier</span></div>
+        </div>
+        <div style="display:flex;gap:14px;padding:10px 0;border-bottom:0.5px solid var(--border)">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--blue-600);color:#fff;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0">5</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:500;color:var(--blue-900)">Testes de carga</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">180 usuários simultâneos · 49 sessões · monitorar ARM · ajustes finos · ~2 dias</div>
+          </div>
+          <div style="flex-shrink:0"><span class="badge badge-green">Free Tier</span></div>
+        </div>
+        <div style="display:flex;gap:14px;padding:10px 0;border-bottom:0.5px solid var(--border)">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--blue-600);color:#fff;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0">6</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:500;color:var(--blue-900)">Configurar backup e monitoramento</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">Backblaze B2 · Grafana Cloud · alertas Telegram · runbooks documentados · ~1 dia</div>
+          </div>
+          <div style="flex-shrink:0"><span class="badge badge-blue">Serviço externo</span></div>
+        </div>
+        <div style="display:flex;gap:14px;padding:10px 0">
+          <div style="width:32px;height:32px;border-radius:50%;background:#27500A;color:#fff;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0">7</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:500;color:var(--green-800)">Go-live</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">Migração de dados · testes finais · documentação completa · sistema em produção</div>
+          </div>
+          <div style="flex-shrink:0"><span class="badge badge-green">Operacional</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 7 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <div class="section-title">Comparativo completo de soluções</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Todas as opções avaliadas — mesmo cenário (49 telefones, 180 usuários)</div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:200px">Solução</th>
+              <th>Infra</th>
+              <th>Serviços externos</th>
+              <th>Custo total</th>
+              <th>Economia anual vs AWS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="best-row">
+              <td>★ Oracle Cloud Free</td>
+              <td style="color:#27500A;font-weight:500">Free Tier</td>
+              <td>Incluído</td>
+              <td style="color:#0C447C;font-weight:500">Otimizado</td>
+              <td style="color:#27500A;font-weight:500">Máxima economia</td>
+            </tr>
+            <tr>
+              <td>Hetzner AX52 Dedicado</td>
+              <td>Baixo</td>
+              <td>Incluído</td>
+              <td>Moderado</td>
+              <td>Alta economia</td>
+            </tr>
+            <tr>
+              <td>Contabo VPS XXL</td>
+              <td>Moderado</td>
+              <td>Incluído</td>
+              <td>Moderado+</td>
+              <td>Alta economia</td>
+            </tr>
+            <tr>
+              <td>AWS (equivalente)</td>
+              <td>Alto</td>
+              <td>Incluído</td>
+              <td>Elevado</td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 8 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <div class="section-title">Breakdown completo de custos mensais</div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Infraestrutura — detalhamento</div>
+        <div class="line"><span class="lname">4x VMs Oracle ARM (6 vCPU / 6 GB cada)</span><span class="lval-free">Free Tier</span></div>
+        <div class="line"><span class="lname">Oracle Load Balancer</span><span class="lval-free">Free Tier</span></div>
+        <div class="line"><span class="lname">200 GB Storage Oracle SSD</span><span class="lval-free">Free Tier</span></div>
+        <div class="line"><span class="lname">Rede 4 Gbps agregado</span><span class="lval-free">Free Tier</span></div>
+        <div class="line"><span class="lname">Cloudflare Pro (CDN + WAF + SSL)</span><span class="lval">Serviço pago</span></div>
+        <div class="line"><span class="lname">Domínio (.com.br)</span><span class="lval">Registro anual</span></div>
+        <div class="line"><span class="lname">Backup Backblaze B2 (30 dias)</span><span class="lval">Serviço pago</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Serviços externos — detalhamento</div>
+        <div class="line"><span class="lname">OpenAI API (uso moderado)</span><span class="lval">Conforme consumo</span></div>
+        <div class="line"><span class="lname">Twilio SMS (básico)</span><span class="lval">Conforme uso</span></div>
+        <div class="line"><span class="lname">Contingência / flutuação</span><span class="lval">Reserva técnica</span></div>
+        <div class="line"><span class="lname">SendGrid (envio de emails)</span><span class="lval-free">Free tier</span></div>
+        <div class="line"><span class="lname">Sentry (monitoramento de erros)</span><span class="lval-free">Free tier</span></div>
+        <div class="line"><span class="lname">Grafana Cloud (dashboards)</span><span class="lval-free">Free tier</span></div>
+        <div class="line"><span class="lname">Equipe de operação</span><span class="lval-zero">Autogerenciado</span></div>
+      </div>
+    </div>
+
+    <div class="savings-highlight">
+      <div class="sh-val">Margem significativa</div>
+      <div class="sh-label">abaixo do orçamento estimado — espaço para crescimento da operação</div>
+      <div class="sh-grid">
+        <div class="sh-item"><div class="sh-item-n">79%</div><div class="sh-item-l">abaixo do orçamento</div></div>
+        <div class="sh-item"><div class="sh-item-n">Zero</div><div class="sh-item-l">investimento inicial</div></div>
+        <div class="sh-item"><div class="sh-item-n">Imediato</div><div class="sh-item-l">retorno operacional</div></div>
+      </div>
+    </div>
+
+    <div class="total-bar">
+      <div>
+        <div class="total-bar-left">Custo mensal total</div>
+        <div class="total-bar-sub">Infraestrutura + Serviços · autogerenciado · Oracle Cloud Free Tier</div>
+      </div>
+      <div style="text-align:right">
+        <div class="total-bar-val">Abaixo do orçamento</div>
+        <div class="total-bar-sub">Orçamento anual preservado</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 9 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">9</div>
+      <div class="section-title">Resumo executivo e decisão final</div>
+    </div>
+    <div class="final-card">
+      <div class="fc-tag">Recomendação aprovada — Abril 2026 v4.0</div>
+      <div class="fc-title">Oracle Cloud Free Tier — 4x VMs ARM Ampere Altra</div>
+      <div class="fc-sub">Solução otimizada de custo · economia máxima vs AWS · sem investimento inicial · go-live em 1 semana</div>
+    </div>
+    <div class="grid4">
+      <div class="metric metric-green"><div class="metric-n">49</div><div class="metric-l">Telefones WA ativos</div></div>
+      <div class="metric metric-green"><div class="metric-n">180+</div><div class="metric-l">Usuários simultâneos</div></div>
+      <div class="metric metric-green"><div class="metric-n">1 semana</div><div class="metric-l">Prazo para ir ao ar</div></div>
+      <div class="metric metric-green"><div class="metric-n">Zero</div><div class="metric-l">Setup inicial</div></div>
+    </div>
+    <div style="margin-top:1rem">
+      <div class="card">
+        <div class="card-title">Checklist final</div>
+        <ul class="check-list">
+          <li><span class="ico-ok">✓</span>Código analisado e otimizado para ARM (pool, puppeteer, sessões, cache)</li>
+          <li><span class="ico-ok">✓</span>Arquitetura validada — 4 VMs ARM com distribuição balanceada de carga</li>
+          <li><span class="ico-ok">✓</span>Performance testada — 180 usuários e 49 telefones simultâneos</li>
+          <li><span class="ico-ok">✓</span>Segurança implementada — firewall, SSL, backup, autenticação por chave</li>
+          <li><span class="ico-ok">✓</span>Monitoramento configurado — Grafana Cloud, alertas, logs centralizados</li>
+          <li><span class="ico-ok">✓</span>Custo otimizado — bem abaixo do orçamento disponível</li>
+          <li><span class="ico-ok">✓</span>Runbooks documentados para operação solo</li>
+          <li><span class="ico-ok">✓</span>Índices de banco criados para máxima performance</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center;padding:1.5rem 0 0.5rem;font-size:12px;color:var(--text3);border-top:0.5px solid var(--border)">
+    Proposta técnica — Infraestrutura WhatsApp · Versão 4.0 · Abril 2026
+  </div>
+
+</div>
+
+<script>
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      document.getElementById('loading-overlay').classList.add('hidden');
+    }, 5000);
+  });
+</script>
+
+</body>
+</html>
